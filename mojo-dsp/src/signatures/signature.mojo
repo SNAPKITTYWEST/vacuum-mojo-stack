@@ -1,78 +1,81 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
-# mojo-dsp: Signature system — compile-time-aware DSL
+# Signature DSL — compile-time-aware contracts between programs and LMs
 
-trait SignatureTrait:
-    fn get_inputs(self) -> List[Field]
-    fn get_outputs(self) -> List[Field]
-    fn get_field(self, name: String) -> Optional[Field]
-    fn validate(self, inputs: Dict[String, AnyType]) -> List[MojoDSPError]
-    fn hash(self) -> String
-    fn serialize(self) -> String
+from collections import List
+from src.core.types import FieldDesc, FieldKind, DTypeTag
 
+struct Signature(Copyable, Movable):
+    var name: String
+    var instruction: String
+    var fields: List[FieldDesc]
 
-struct Signature(Serializable, Hashable, Cloneable):
-    let name: String
-    let description: Optional[String]
-    let fields: Dict[String, Field]
-    let version: String
-
-    fn __init__(self, name: String, description: Optional[String] = None,
-                version: String = "1.0.0"):
+    def __init__(out self, name: String, instruction: String = ""):
         self.name = name
-        self.description = description
-        self.fields = {}
-        self.version = version
+        self.instruction = instruction
+        self.fields = List[FieldDesc]()
 
-    fn add_input(self, field: InputField) -> Self:
-        self.fields[field.name] = field
+    def add_input(
+        mut self,
+        name: String,
+        dtype: DTypeTag = DTypeTag.string(),
+        description: String = "",
+        required: Bool = True,
+    ) -> ref [self] Self:
+        self.fields.append(
+            FieldDesc(name, FieldKind.input(), dtype, description, required)
+        )
         return self
 
-    fn add_output(self, field: OutputField) -> Self:
-        self.fields[field.name] = field
+    def add_output(
+        mut self,
+        name: String,
+        dtype: DTypeTag = DTypeTag.string(),
+        description: String = "",
+        required: Bool = True,
+    ) -> ref [self] Self:
+        self.fields.append(
+            FieldDesc(name, FieldKind.output(), dtype, description, required)
+        )
         return self
 
-    fn get_inputs(self) -> List[Field]:
-        return [f for f in self.fields.values() if f.direction == FieldDirection.INPUT]
+    def input_fields(self) -> List[FieldDesc]:
+        var result = List[FieldDesc]()
+        for i in range(len(self.fields)):
+            if self.fields[i].kind.raw == FieldKind.INPUT:
+                result.append(self.fields[i])
+        return result^
 
-    fn get_outputs(self) -> List[Field]:
-        return [f for f in self.fields.values() if f.direction == FieldDirection.OUTPUT]
+    def output_fields(self) -> List[FieldDesc]:
+        var result = List[FieldDesc]()
+        for i in range(len(self.fields)):
+            if self.fields[i].kind.raw == FieldKind.OUTPUT:
+                result.append(self.fields[i])
+        return result^
 
-    fn get_field(self, name: String) -> Optional[Field]:
-        return self.fields.get(name)
+    def field_names(self) -> List[String]:
+        var names = List[String]()
+        for i in range(len(self.fields)):
+            names.append(self.fields[i].name)
+        return names^
 
-    fn validate(self, inputs: Dict[String, AnyType]) -> List[MojoDSPError]:
-        errors = []
-        for field_name, field in self.fields.items():
-            if field.direction == FieldDirection.INPUT:
-                if field.metadata.required and field_name not in inputs:
-                    errors.append(ValidationError(
-                        f"Required input field '{field_name}' is missing",
-                        field_name, None, []
-                    ))
-                elif field_name in inputs:
-                    pass
-        return errors
+def qa_signature(instruction: String = "Answer the question.") -> Signature:
+    var sig = Signature("QuestionAnswer", instruction)
+    _ = sig.add_input("question", DTypeTag.string(), "The question to answer")
+    _ = sig.add_output("answer", DTypeTag.string(), "The answer")
+    return sig^
 
-    fn hash(self) -> String:
-        data = f"{self.name}:{self.version}"
-        for name, field in sorted(self.fields.items()):
-            data += f":{name}:{field.hash()}"
-        return hashlib.sha256(data.encode()).hexdigest()
+def math_signature(
+    instruction: String = "Solve the math problem step by step.",
+) -> Signature:
+    var sig = Signature("MathProblem", instruction)
+    _ = sig.add_input("problem", DTypeTag.string(), "Math problem statement")
+    _ = sig.add_output("reasoning", DTypeTag.string(), "Step-by-step reasoning")
+    _ = sig.add_output("answer", DTypeTag.int_(), "Final numeric answer")
+    return sig^
 
-    fn serialize(self) -> String:
-        fields_data = {}
-        for name, field in self.fields.items():
-            fields_data[name] = json.loads(field.serialize())
-        return json.dumps({
-            "type": "signature",
-            "name": self.name,
-            "description": self.description,
-            "version": self.version,
-            "fields": fields_data
-        })
-
-    fn clone(self) -> Self:
-        new_sig = Signature(self.name, self.description, self.version)
-        for field in self.fields.values():
-            new_sig.fields[field.name] = field.clone()
-        return new_sig
+def classification_signature(
+    labels_desc: String = "class label",
+) -> Signature:
+    var sig = Signature("Classification", "Classify the input.")
+    _ = sig.add_input("text", DTypeTag.string(), "Text to classify")
+    _ = sig.add_output("label", DTypeTag.string(), labels_desc)
+    return sig^
