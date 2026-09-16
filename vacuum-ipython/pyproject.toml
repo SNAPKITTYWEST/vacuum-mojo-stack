@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vacuum-ipython"
+version = "0.1.0"
+description = "Hand-rolled IPython input transformer with a provenance DSL"
+requires-python = ">=3.10"
+dependencies = ["ipython>=8.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
